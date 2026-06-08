@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build tests
+        run: docker build -t prometheus_client_cxx_tests -f ./tests/Dockerfile .
+
+      - name: Run tests
+        run: docker run --rm prometheus_client_cxx_tests

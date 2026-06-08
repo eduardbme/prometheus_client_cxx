@@ -1,0 +1,402 @@
+#ifndef PROMETHEUS_HPP_
+#define PROMETHEUS_HPP_
+
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <tuple>
+#include <vector>
+
+namespace prometheus {
+
+constexpr std::string_view TEXT_FORMAT_V004 =
+    "text/plain; version=0.0.4; charset=utf-8";
+constexpr std::string_view OPENMETRICS_V100 =
+    "application/openmetrics-text; version=1.0.0; charset=utf-8";
+
+class registry;
+
+namespace internal {
+
+using metric_name = std::string;
+using metric_help = std::string;
+
+class label;
+class labels_list;
+class metric_family;
+class base_metric;
+class metric;
+class gauge;
+class counter;
+
+std::ostream &operator<<(std::ostream &os, const metric_family &family);
+std::ostream &operator<<(std::ostream &os, const metric &metric);
+
+class label {
+public:
+  label(const std::string &key, const std::string &value)
+      : _key(key), _value(value) {}
+
+  std::string str() const {
+    return "\"" + this->_key +
+           "\""
+           "=" +
+           "\"" + this->_value + "\"";
+  }
+
+  bool operator==(const internal::label &rhs) const {
+    return std::tie(this->_key, this->_value) == std::tie(rhs._key, rhs._value);
+  }
+
+  bool operator!=(const internal::label &rhs) const { return !(*this == rhs); }
+
+  bool operator<(const internal::label &rhs) const {
+    return std::tie(this->_key, this->_value) < std::tie(rhs._key, rhs._value);
+  }
+
+  friend std::ostream &operator<<(std::ostream &os, const internal::label &l) {
+    return os << l.str();
+  }
+
+private:
+  std::string _key;
+  std::string _value;
+};
+
+class labels_list {
+public:
+  labels_list() = default;
+  labels_list(const std::initializer_list<internal::label> &labels) {
+    std::vector<internal::label> lv(labels);
+    std::sort(lv.begin(), lv.end());
+
+    this->_labels = lv;
+  }
+
+  std::string str() const {
+    if (this->_labels.empty()) {
+      return "";
+    }
+
+    std::stringstream ss;
+
+    ss << "{";
+
+    for (const auto &label : this->_labels) {
+      ss << label << ',';
+    }
+
+    // Remove trailing comma
+    if (!this->_labels.empty()) {
+      ss.seekp(-1, std::ios_base::end);
+    }
+
+    ss << "}";
+
+    return ss.str();
+  }
+
+  bool operator==(const internal::labels_list &other) const {
+    return (this->_labels == other._labels);
+  }
+
+  bool operator!=(const internal::labels_list &other) const {
+    return !(*this == other);
+  }
+
+  internal::labels_list &operator+=(const internal::label &label) {
+    *this += internal::labels_list({label});
+
+    return *this;
+  }
+
+  internal::labels_list &operator+=(const internal::labels_list &rhs) {
+    this->_labels.insert(this->_labels.end(), rhs._labels.begin(),
+                         rhs._labels.end());
+    std::sort(this->_labels.begin(), this->_labels.end());
+
+    return *this;
+  }
+
+  friend internal::labels_list operator+(internal::labels_list lhs,
+                                         const internal::labels_list &rhs) {
+    lhs += rhs;
+    return lhs;
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const internal::labels_list &r) {
+    os << r.str();
+
+    return os;
+  }
+
+  friend bool operator<(const internal::labels_list &lhs,
+                        const internal::labels_list &rhs) {
+    return lhs._labels < rhs._labels;
+  }
+
+private:
+  std::vector<label> _labels;
+};
+
+class metric_key {
+public:
+  metric_key(const metric_name &name, const internal::labels_list &labels_list)
+      : _name(name), _labels_list(labels_list) {}
+
+  bool operator<(const metric_key &rhs) const {
+    return std::tie(_name, _labels_list) <
+           std::tie(rhs._name, rhs._labels_list);
+  }
+
+private:
+  std::string _name;
+  internal::labels_list _labels_list;
+};
+
+class metric_family {
+public:
+  metric_family(registry *registry, const metric_name &name,
+                const metric_help &help)
+      : _registry(registry), _name(name), _help(help) {}
+
+  template <typename T>
+  std::shared_ptr<internal::base_metric>
+  add(const internal::labels_list &labels);
+  void remove(const internal::labels_list &labels);
+
+  virtual std::string type() const = 0;
+
+  friend std::ostream &internal::operator<<(std::ostream &os,
+                                            const internal::metric_family &m);
+
+private:
+  registry *_registry;
+  metric_name _name;
+  metric_help _help;
+  std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>
+      _metrics;
+};
+
+class gauge_metric_family : public metric_family {
+public:
+  gauge_metric_family(registry *registry, const metric_name &name,
+                      const metric_help &help)
+      : metric_family(registry, name, help) {}
+
+  std::string type() const override { return "gauge"; };
+};
+
+class counter_metric_family : public metric_family {
+public:
+  counter_metric_family(registry *registry, const metric_name &name,
+                        const metric_help &help)
+      : metric_family(registry, name, help) {}
+
+  std::string type() const override { return "counter"; };
+};
+
+class base_metric {
+public:
+  virtual ~base_metric() = default;
+};
+
+class metric : public base_metric {
+public:
+  metric(registry *registry, const std::string &name,
+         const internal::labels_list &labels_list)
+      : _registry(registry), _name(name), _labels_list(labels_list), _value(0) {
+  }
+  virtual ~metric() = default;
+
+  friend std::ostream &operator<<(std::ostream &os, const internal::metric &m);
+
+protected:
+  int _value;
+
+private:
+  registry *_registry;
+  std::string _name;
+  internal::labels_list _labels_list;
+};
+
+class gauge : public metric {
+public:
+  gauge(registry *registry, const std::string &name,
+        const internal::labels_list &labels_list)
+      : metric(registry, name, labels_list) {}
+
+  void set(int value) { this->_value = value; }
+};
+
+class counter : public metric {
+public:
+  counter(registry *registry, const std::string &name,
+          const internal::labels_list &labels_list)
+      : metric(registry, name, labels_list) {}
+
+  void inc(int value = 1) { this->_value += value; }
+};
+
+inline void metric_family::remove(const internal::labels_list &labels) {
+  this->_metrics.erase({this->_name, labels});
+}
+
+template <typename T>
+inline std::shared_ptr<internal::base_metric>
+metric_family::add(const internal::labels_list &labels) {
+  auto [it, inserted] =
+      this->_metrics.try_emplace({this->_name, labels}, nullptr);
+  if (inserted) {
+    it->second = std::make_shared<T>(this->_registry, this->_name, labels);
+  }
+
+  return it->second;
+}
+
+} // namespace internal
+
+class registry {
+  class __restricted;
+
+public:
+  registry(__restricted) {}
+
+  static std::shared_ptr<registry> create() {
+    return std::make_shared<registry>(__restricted{});
+  }
+
+  void label_set(const internal::label &label) {
+    this->_registry_labels += label;
+  }
+
+  std::shared_ptr<internal::gauge>
+  gauge(const internal::metric_name &name, const internal::metric_help &help,
+        const internal::labels_list &labels_list = {}) {
+    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
+    if (inserted) {
+      family->second =
+          std::make_shared<internal::gauge_metric_family>(this, name, help);
+    }
+
+    if (auto f = std::dynamic_pointer_cast<internal::gauge_metric_family>(
+            family->second);
+        !f) {
+      // Prevent potential SEGFAULT by returning nullptr for a mismatch family
+      // type. Return untraceable throw-away object.
+      return std::make_shared<internal::gauge>(this, name, labels_list);
+    }
+
+    auto gauge = family->second->add<internal::gauge>(labels_list);
+    this->_metrics.insert({labels_list, name});
+
+    return std::dynamic_pointer_cast<internal::gauge>(gauge);
+  }
+
+  std::shared_ptr<internal::counter>
+  counter(const internal::metric_name &name, const internal::metric_help &help,
+          const internal::labels_list &labels_list = {}) {
+
+    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
+    if (inserted) {
+      family->second =
+          std::make_shared<internal::counter_metric_family>(this, name, help);
+    }
+
+    if (auto f = std::dynamic_pointer_cast<internal::counter_metric_family>(
+            family->second);
+        !f) {
+      // Prevent potential SEGFAULT by returning nullptr for a mismatch family
+      // type. Return untraceable throw-away object.
+      return std::make_shared<internal::counter>(this, name, labels_list);
+    }
+
+    auto counter = family->second->add<internal::counter>(labels_list);
+    this->_metrics.insert({labels_list, name});
+
+    return std::dynamic_pointer_cast<internal::counter>(counter);
+  }
+
+  void remove(const internal::metric_name &name,
+              const internal::labels_list &labels_list = {}) {
+    auto it = this->_families.find(name);
+    if (it == this->_families.end()) {
+      return;
+    }
+
+    it->second->remove(labels_list);
+  }
+
+  void remove(const internal::labels_list &labels_list) {
+    auto range = this->_metrics.equal_range(labels_list);
+    for (auto it = range.first; it != range.second; ++it) {
+      this->remove(it->second, it->first);
+    }
+
+    this->_metrics.erase(labels_list);
+  }
+
+  std::string str() const {
+    std::stringstream ss;
+    ss << *this;
+
+    return ss.str();
+  }
+
+  friend std::ostream &operator<<(std::ostream &os, const registry &r) {
+    std::for_each(r._families.begin(), r._families.end(),
+                  [&](const auto &f) -> void { os << *f.second; });
+
+    return os;
+  }
+
+private:
+  std::multimap<internal::labels_list, internal::metric_name> _metrics;
+  std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>
+      _families;
+  internal::labels_list _registry_labels;
+
+  friend class metric;
+  friend std::ostream &internal::operator<<(std::ostream &os,
+                                            const internal::metric &m);
+
+  struct __restricted {
+    explicit __restricted() = default;
+  };
+};
+
+inline std::ostream &
+internal::operator<<(std::ostream &os, const internal::metric_family &family) {
+  if (!family._metrics.size()) {
+    return os;
+  }
+
+  os << "# HELP " << family._name << " " << family._help << std::endl;
+  os << "# TYPE " << family._name << " " << family.type() << std::endl;
+
+  std::for_each(family._metrics.begin(), family._metrics.end(),
+                [&](const auto &f) -> void {
+                  os << *std::dynamic_pointer_cast<internal::metric>(f.second)
+                     << std::endl;
+                });
+
+  os << std::endl;
+
+  return os;
+}
+
+inline std::ostream &internal::operator<<(std::ostream &os,
+                                          const internal::metric &m) {
+  os << m._name << m._labels_list + m._registry->_registry_labels << " "
+     << m._value;
+
+  return os;
+}
+
+} // namespace prometheus
+
+#endif
