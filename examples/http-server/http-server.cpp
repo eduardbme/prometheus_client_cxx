@@ -5,10 +5,7 @@
 
 int main() {
   httplib::Server svr;
-  auto reg = prometheus::registry::create([](const std::string &error) {
-    std::cerr << "Registry error: " << error << std::endl;
-    std::abort();
-  });
+  auto reg = prometheus::registry::create();
 
   svr.Get("/metrics", [&](const httplib::Request &, httplib::Response &res) {
     res.set_content(reg->str(),
