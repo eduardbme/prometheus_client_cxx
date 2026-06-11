@@ -5,7 +5,7 @@
 
 using namespace prometheus::internal;
 
-TEST(LabelsTest, LabelsMerge) {
+TEST(LabelsListTest, OperatorPlus) {
   labels_list l1 = {{"a", "val1"}};
   labels_list l2 = {{"b", "val2"}};
   labels_list l3 = {{"a", "val1"}, {"b", "val2"}};
@@ -13,7 +13,7 @@ TEST(LabelsTest, LabelsMerge) {
   EXPECT_EQ(l1 + l2, l3);
 }
 
-TEST(LabelsTest, LabelsEquality) {
+TEST(LabelsListTest, OperatorEqual) {
   labels_list l1 = {};
   labels_list l2 = {};
 
@@ -24,7 +24,7 @@ TEST(LabelsTest, LabelsEquality) {
   EXPECT_EQ(l3, l4);
 }
 
-TEST(LabelsTest, LabelsInequality) {
+TEST(LabelsListTest, OperatorNotEqual) {
   labels_list l1 = {{"a", "val1"}};
   labels_list l2 = {{"a", "val2"}};
 
@@ -35,7 +35,7 @@ TEST(LabelsTest, LabelsInequality) {
   EXPECT_NE(l3, l4);
 }
 
-TEST(LabelsTest, OperatorLess) {
+TEST(LabelsListTest, OperatorLess) {
   labels_list l1 = {{"a", "val1"}};
   labels_list l2 = {{"a", "val2"}};
 
@@ -46,7 +46,7 @@ TEST(LabelsTest, OperatorLess) {
   EXPECT_LT(l3, l4);
 }
 
-TEST(LabelsTest, OperatorStreamOutput) {
+TEST(LabelsListTest, OperatorStreamOutput) {
   labels_list l0 = {};
   labels_list l1 = {{"a", "val1"}};
   labels_list l2 = {{"a", "val1"}, {"b", "val2"}};

@@ -3,7 +3,7 @@
 
 #include "../single_include/prometheus.hpp"
 
-TEST(CounterTest, Inc) {
+TEST(CounterTest, CounterWithoutLabel) {
   auto reg = prometheus::registry::create();
 
   reg->counter("counter1", "help1")->inc();

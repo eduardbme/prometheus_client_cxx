@@ -5,8 +5,6 @@
 
 using namespace prometheus::internal;
 
-// TODO: rename tests
-
 TEST(LabelTest, OperatorEqual) {
   EXPECT_EQ(label({"a", "val1"}), label({"a", "val1"}));
 }

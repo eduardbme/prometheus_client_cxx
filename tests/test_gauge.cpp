@@ -24,7 +24,7 @@ TEST(GaugeTest, GaugeUpdate) {
                                               "gauge1 2\n\n");
 }
 
-TEST(GaugeTest, GaugeLabel) {
+TEST(GaugeTest, GaugeWithLabel) {
   auto reg = prometheus::registry::create();
 
   reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(1);
@@ -35,7 +35,7 @@ TEST(GaugeTest, GaugeLabel) {
               "gauge1{\"key1\"=\"value1\"} 1\n\n");
 }
 
-TEST(GaugeTest, GaugeLabelUpdate) {
+TEST(GaugeTest, GaugeWithLabelUpdate) {
   auto reg = prometheus::registry::create();
 
   reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(1);
@@ -47,7 +47,7 @@ TEST(GaugeTest, GaugeLabelUpdate) {
               "gauge1{\"key1\"=\"value1\"} 2\n\n");
 }
 
-TEST(GaugeTest, GaugeLabelsOrder) {
+TEST(GaugeTest, GaugeWithLabel_LabelsOrder) {
   auto reg = prometheus::registry::create();
 
   reg->gauge("gauge1", "help1", {{"key1", "value1"}, {"key2", "value2"}})
@@ -78,7 +78,7 @@ TEST(GaugeTest, GaugeFamily) {
               "gauge1{\"key2\"=\"value1\"} 4\n\n");
 }
 
-TEST(GaugeTest, GaugeAnyNumericType) {
+TEST(GaugeTest, GaugeNumericTypeOnly) {
   auto reg = prometheus::registry::create();
 
   // compile time error
