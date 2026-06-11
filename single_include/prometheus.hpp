@@ -178,6 +178,8 @@ public:
   std::string type() const override { return "counter"; };
 };
 
+// Type Erasure.
+// To be able to store any internal::metric<T> within the container.
 class base_metric {
 public:
   virtual ~base_metric() = default;
