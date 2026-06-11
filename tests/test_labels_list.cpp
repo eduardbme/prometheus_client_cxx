@@ -5,18 +5,6 @@
 
 using namespace prometheus::internal;
 
-TEST(LabelsTest, LabelsStr) {
-  labels_list l0 = {};
-  labels_list l1 = {{"a", "val1"}};
-  labels_list l2 = {{"a", "val1"}, {"b", "val2"}};
-  labels_list l3 = {{"b", "val2"}, {"a", "val1"}};
-
-  EXPECT_EQ(l0.str(), "");
-  EXPECT_EQ(l1.str(), "{\"a\"=\"val1\"}");
-  EXPECT_EQ(l2.str(), "{\"a\"=\"val1\",\"b\"=\"val2\"}");
-  EXPECT_EQ(l3.str(), "{\"a\"=\"val1\",\"b\"=\"val2\"}");
-}
-
 TEST(LabelsTest, LabelsMerge) {
   labels_list l1 = {{"a", "val1"}};
   labels_list l2 = {{"b", "val2"}};
@@ -56,4 +44,16 @@ TEST(LabelsTest, OperatorLess) {
 
   EXPECT_LT(l1, l2);
   EXPECT_LT(l3, l4);
+}
+
+TEST(LabelsTest, OperatorStreamOutput) {
+  labels_list l0 = {};
+  labels_list l1 = {{"a", "val1"}};
+  labels_list l2 = {{"a", "val1"}, {"b", "val2"}};
+  labels_list l3 = {{"b", "val2"}, {"a", "val1"}};
+
+  EXPECT_THAT(::testing::PrintToString(l0), "");
+  EXPECT_THAT(::testing::PrintToString(l1), "{\"a\"=\"val1\"}");
+  EXPECT_THAT(::testing::PrintToString(l2), "{\"a\"=\"val1\",\"b\"=\"val2\"}");
+  EXPECT_THAT(::testing::PrintToString(l3), "{\"a\"=\"val1\",\"b\"=\"val2\"}");
 }

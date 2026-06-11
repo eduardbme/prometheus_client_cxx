@@ -38,13 +38,6 @@ public:
   label(const std::string &key, const std::string &value)
       : _key(key), _value(value) {}
 
-  std::string str() const {
-    return "\"" + this->_key +
-           "\""
-           "=" +
-           "\"" + this->_value + "\"";
-  }
-
   bool operator==(const internal::label &rhs) const {
     return std::tie(this->_key, this->_value) == std::tie(rhs._key, rhs._value);
   }
@@ -56,7 +49,7 @@ public:
   }
 
   friend std::ostream &operator<<(std::ostream &os, const internal::label &l) {
-    return os << l.str();
+    return os << "\"" << l._key << "\"=\"" << l._value + "\"";
   }
 
 private:
@@ -72,29 +65,6 @@ public:
     std::sort(lv.begin(), lv.end());
 
     this->_labels = lv;
-  }
-
-  std::string str() const {
-    if (this->_labels.empty()) {
-      return "";
-    }
-
-    std::stringstream ss;
-
-    ss << "{";
-
-    for (const auto &label : this->_labels) {
-      ss << label << ',';
-    }
-
-    // Remove trailing comma
-    if (!this->_labels.empty()) {
-      ss.seekp(-1, std::ios_base::end);
-    }
-
-    ss << "}";
-
-    return ss.str();
   }
 
   bool operator==(const internal::labels_list &other) const {
@@ -127,9 +97,19 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const internal::labels_list &r) {
-    os << r.str();
+    if (r._labels.empty()) {
+      return os << "";
+    }
 
-    return os;
+    os << '{';
+
+    auto it = r._labels.begin();
+    os << *it;
+    for (++it; it != r._labels.end(); ++it) {
+      os << ',' << *it;
+    }
+
+    return os << '}';
   }
 
   friend bool operator<(const internal::labels_list &lhs,
@@ -343,7 +323,7 @@ public:
     this->_metrics.erase(labels_list);
   }
 
-  std::string str() const {
+  std::string to_string() const {
     std::stringstream ss;
     ss << *this;
 

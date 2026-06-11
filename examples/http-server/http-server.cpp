@@ -8,7 +8,7 @@ int main() {
   auto reg = prometheus::registry::create();
 
   svr.Get("/metrics", [&](const httplib::Request &, httplib::Response &res) {
-    res.set_content(reg->str(),
+    res.set_content(reg->to_string(),
                     static_cast<std::string>(prometheus::TEXT_FORMAT_V004));
   });
 

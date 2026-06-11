@@ -7,12 +7,6 @@ using namespace prometheus::internal;
 
 // TODO: rename tests
 
-TEST(LabelTest, Str) {
-  label l1 = {"a", "val1"};
-
-  EXPECT_EQ(l1.str(), "\"a\"=\"val1\"");
-}
-
 TEST(LabelTest, OperatorEqual) {
   EXPECT_EQ(label({"a", "val1"}), label({"a", "val1"}));
 }
@@ -28,10 +22,7 @@ TEST(LabelTest, OperatorLess) {
 }
 
 TEST(LabelTest, OperatorStreamOutput) {
-  label l{"a", "val1"};
+  label l1 = {"a", "val1"};
 
-  std::stringstream ss;
-  ss << l;
-
-  EXPECT_EQ(ss.str(), l.str());
+  EXPECT_THAT(::testing::PrintToString(l1), "\"a\"=\"val1\"");
 }
