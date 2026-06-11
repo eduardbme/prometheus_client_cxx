@@ -8,8 +8,8 @@
 #include <sstream>
 #include <string>
 #include <tuple>
-#include <vector>
 #include <type_traits>
+#include <vector>
 
 namespace prometheus {
 
