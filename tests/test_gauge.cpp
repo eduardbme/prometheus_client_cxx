@@ -81,20 +81,32 @@ TEST(GaugeTest, GaugeFamily) {
 TEST(GaugeTest, GaugeAnyNumericType) {
   auto reg = prometheus::registry::create();
 
-  reg->gauge("gauge1", "help1", {{"key", "test1"}})->set(1);
-  reg->gauge("gauge1", "help1", {{"key", "test2"}})->set(1.1f);
-  reg->gauge("gauge1", "help1", {{"key", "test3"}})->set(1.1);
-  // TODO:
-  // reg->gauge<size_t>("gauge1", "help1", {{"key", "test4"}})
-  //     ->set(std::numeric_limits<std::size_t>::max());
+  // compile time error
+  // reg->gauge<std::string>("incorrect1", "help1")
+  //     ->set("");
+
+  reg->gauge("gauge1", "help1", {{"key", "test1"}})
+      ->set(std::numeric_limits<int>::max());
+  reg->gauge<float>("gauge1", "help1", {{"key", "test2"}})
+      ->set(std::numeric_limits<float>::max());
+  reg->gauge<double>("gauge1", "help1", {{"key", "test3"}})
+      ->set(std::numeric_limits<double>::max());
+  reg->gauge<size_t>("gauge1", "help1", {{"key", "test4"}})
+      ->set(std::numeric_limits<std::size_t>::max());
 
   EXPECT_THAT(::testing::PrintToString(*reg),
               "# HELP gauge1 help1\n"
               "# TYPE gauge1 gauge\n"
-              "gauge1{\"key\"=\"test1\"} 1\n"
-              "gauge1{\"key\"=\"test2\"} 1.1\n"
-              "gauge1{\"key\"=\"test3\"} 1.1\n"
-              "gauge1{\"key\"=\"test4\"} " +
+              "gauge1{\"key\"=\"test1\"} " +
+                  std::to_string(std::numeric_limits<int>::max()) +
+                  "\n"
+                  "gauge1{\"key\"=\"test2\"} " +
+                  std::to_string(std::numeric_limits<float>::max()) +
+                  "\n"
+                  "gauge1{\"key\"=\"test3\"} " +
+                  std::to_string(std::numeric_limits<double>::max()) +
+                  "\n"
+                  "gauge1{\"key\"=\"test4\"} " +
                   std::to_string(std::numeric_limits<std::size_t>::max()) +
                   "\n\n");
 }

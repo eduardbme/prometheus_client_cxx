@@ -9,6 +9,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <type_traits>
 
 namespace prometheus {
 
@@ -28,12 +29,11 @@ class label;
 class labels_list;
 class metric_family;
 class base_metric;
-class metric;
-class gauge;
-class counter;
+template <typename T> class metric;
+template <typename T> class gauge;
+template <typename T> class counter;
 
 std::ostream &operator<<(std::ostream &os, const metric_family &family);
-std::ostream &operator<<(std::ostream &os, const metric &metric);
 
 class label {
 public:
@@ -203,20 +203,23 @@ public:
 class base_metric {
 public:
   virtual ~base_metric() = default;
+  virtual std::string to_string() const = 0;
 };
 
-class metric : public base_metric {
+template <typename T> class metric : public base_metric {
+  static_assert(std::is_arithmetic<T>::value,
+                "metric<T> supports numerical types only!");
+
 public:
   metric(registry *registry, const std::string &name,
          const internal::labels_list &labels_list)
       : _registry(registry), _name(name), _labels_list(labels_list), _value(0) {
   }
-  virtual ~metric() = default;
 
-  friend std::ostream &operator<<(std::ostream &os, const internal::metric &m);
+  std::string to_string() const override;
 
 protected:
-  int _value;
+  T _value;
 
 private:
   registry *_registry;
@@ -224,22 +227,22 @@ private:
   internal::labels_list _labels_list;
 };
 
-class gauge : public metric {
+template <typename T> class gauge : public metric<T> {
 public:
   gauge(registry *registry, const std::string &name,
         const internal::labels_list &labels_list)
-      : metric(registry, name, labels_list) {}
+      : metric<T>(registry, name, labels_list) {}
 
-  void set(int value) { this->_value = value; }
+  void set(T value) { this->_value = value; }
 };
 
-class counter : public metric {
+template <typename T> class counter : public metric<T> {
 public:
   counter(registry *registry, const std::string &name,
           const internal::labels_list &labels_list)
-      : metric(registry, name, labels_list) {}
+      : metric<T>(registry, name, labels_list) {}
 
-  void inc(int value = 1) { this->_value += value; }
+  void inc(T value = 1) { this->_value += value; }
 };
 
 inline void metric_family::remove(const internal::labels_list &labels) {
@@ -274,7 +277,8 @@ public:
     this->_registry_labels += label;
   }
 
-  std::shared_ptr<internal::gauge>
+  template <typename T = int>
+  std::shared_ptr<internal::gauge<T>>
   gauge(const internal::metric_name &name, const internal::metric_help &help,
         const internal::labels_list &labels_list = {}) {
     auto [family, inserted] = this->_families.try_emplace(name, nullptr);
@@ -288,16 +292,17 @@ public:
         !f) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::gauge>(this, name, labels_list);
+      return std::make_shared<internal::gauge<T>>(this, name, labels_list);
     }
 
-    auto gauge = family->second->add<internal::gauge>(labels_list);
+    auto gauge = family->second->add<internal::gauge<T>>(labels_list);
     this->_metrics.insert({labels_list, name});
 
-    return std::dynamic_pointer_cast<internal::gauge>(gauge);
+    return std::dynamic_pointer_cast<internal::gauge<T>>(gauge);
   }
 
-  std::shared_ptr<internal::counter>
+  template <typename T = int>
+  std::shared_ptr<internal::counter<T>>
   counter(const internal::metric_name &name, const internal::metric_help &help,
           const internal::labels_list &labels_list = {}) {
 
@@ -312,13 +317,13 @@ public:
         !f) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::counter>(this, name, labels_list);
+      return std::make_shared<internal::counter<T>>(this, name, labels_list);
     }
 
-    auto counter = family->second->add<internal::counter>(labels_list);
+    auto counter = family->second->add<internal::counter<T>>(labels_list);
     this->_metrics.insert({labels_list, name});
 
-    return std::dynamic_pointer_cast<internal::counter>(counter);
+    return std::dynamic_pointer_cast<internal::counter<T>>(counter);
   }
 
   void remove(const internal::metric_name &name,
@@ -360,9 +365,7 @@ private:
       _families;
   internal::labels_list _registry_labels;
 
-  friend class metric;
-  friend std::ostream &internal::operator<<(std::ostream &os,
-                                            const internal::metric &m);
+  template <typename T> friend class internal::metric;
 
   struct __restricted {
     explicit __restricted() = default;
@@ -378,23 +381,23 @@ internal::operator<<(std::ostream &os, const internal::metric_family &family) {
   os << "# HELP " << family._name << " " << family._help << std::endl;
   os << "# TYPE " << family._name << " " << family.type() << std::endl;
 
-  std::for_each(family._metrics.begin(), family._metrics.end(),
-                [&](const auto &f) -> void {
-                  os << *std::dynamic_pointer_cast<internal::metric>(f.second)
-                     << std::endl;
-                });
+  std::for_each(
+      family._metrics.begin(), family._metrics.end(),
+      [&](const auto &f) -> void { os << f.second->to_string() << std::endl; });
 
   os << std::endl;
 
   return os;
 }
 
-inline std::ostream &internal::operator<<(std::ostream &os,
-                                          const internal::metric &m) {
-  os << m._name << m._labels_list + m._registry->_registry_labels << " "
-     << m._value;
+template <typename T>
+inline std::string internal::metric<T>::to_string() const {
+  std::stringstream ss;
 
-  return os;
+  ss << this->_name << this->_labels_list + this->_registry->_registry_labels
+     << " " << std::to_string(this->_value);
+
+  return ss.str();
 }
 
 } // namespace prometheus
