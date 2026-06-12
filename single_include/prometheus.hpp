@@ -33,10 +33,13 @@ template <typename T> class counter;
 
 std::ostream &operator<<(std::ostream &os, const metric_family &family);
 
+// Immutable
 class label {
 public:
   label(const std::string &key, const std::string &value)
       : _key(key), _value(value) {}
+
+  const std::string &key() const { return this->_key; }
 
   bool operator==(const internal::label &rhs) const {
     return std::tie(this->_key, this->_value) == std::tie(rhs._key, rhs._value);
@@ -57,14 +60,19 @@ private:
   std::string _value;
 };
 
+// Immutable
 class labels_list {
+private:
+  struct labels_list_comparator {
+    bool operator()(const label &lhs, const label &rhs) const {
+      return lhs.key() < rhs.key();
+    }
+  };
+
 public:
   labels_list() = default;
   labels_list(const std::initializer_list<internal::label> &labels) {
-    std::vector<internal::label> lv(labels);
-    std::sort(lv.begin(), lv.end());
-
-    this->_labels = lv;
+    this->_labels = labels;
   }
 
   bool operator==(const internal::labels_list &other) const {
@@ -75,24 +83,14 @@ public:
     return !(*this == other);
   }
 
-  internal::labels_list &operator+=(const internal::label &label) {
-    *this += internal::labels_list({label});
-
-    return *this;
-  }
-
-  internal::labels_list &operator+=(const internal::labels_list &rhs) {
-    this->_labels.insert(this->_labels.end(), rhs._labels.begin(),
-                         rhs._labels.end());
-    std::sort(this->_labels.begin(), this->_labels.end());
-
-    return *this;
-  }
-
-  friend internal::labels_list operator+(internal::labels_list lhs,
+  friend internal::labels_list operator+(const internal::labels_list &lhs,
                                          const internal::labels_list &rhs) {
-    lhs += rhs;
-    return lhs;
+    // Use 'rhs' first, std::set does not override values,
+    // rhs + lhs != lhs + rhs.
+    labels_list new_labels_list = rhs;
+    new_labels_list._labels.insert(lhs._labels.begin(), lhs._labels.end());
+
+    return new_labels_list;
   }
 
   friend std::ostream &operator<<(std::ostream &os,
@@ -118,7 +116,7 @@ public:
   }
 
 private:
-  std::vector<label> _labels;
+  std::set<label, labels_list_comparator> _labels;
 };
 
 class metric_key {
@@ -254,7 +252,8 @@ public:
   }
 
   void label_set(const internal::label &label) {
-    this->_registry_labels += label;
+    this->_registry_labels =
+        this->_registry_labels + internal::labels_list({label});
   }
 
   template <typename T = int>
