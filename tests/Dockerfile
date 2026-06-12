@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -9,6 +9,7 @@ RUN apt-get update && \
         git \
         wget \
         curl \
+        gcc-14 g++-14 \
         && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /third_party
@@ -35,4 +36,4 @@ ENV GTest_DIR=/third_party/googletest/build/lib/cmake/GTest
 RUN cmake -B build -S . && \
     cmake --build build
 
-CMD ["ctest", "--test-dir", "build", "--output-on-failure"]
+CMD ["sh", "-c", "ctest --test-dir build --output-on-failure && ./build/runTsan"]

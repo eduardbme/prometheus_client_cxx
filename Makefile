@@ -2,7 +2,7 @@
 
 tests:
 	docker build -t prometheus_client_cxx_tests -f ./tests/Dockerfile . --progress=plain && \
-	docker run --rm prometheus_client_cxx_tests
+	docker run --privileged --rm prometheus_client_cxx_tests
 
 examples:
 	docker build -t prometheus_client_cxx_examples -f ./examples/Dockerfile . --progress=plain && \

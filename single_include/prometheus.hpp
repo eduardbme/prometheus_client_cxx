@@ -2,10 +2,15 @@
 #define PROMETHEUS_HPP_
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <set>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -136,7 +141,7 @@ private:
 
 class metric_family {
 public:
-  metric_family(registry *registry, const metric_name &name,
+  metric_family(const registry *registry, const metric_name &name,
                 const metric_help &help)
       : _registry(registry), _name(name), _help(help) {}
 
@@ -151,11 +156,13 @@ public:
                                             const internal::metric_family &m);
 
 private:
-  registry *_registry;
-  metric_name _name;
-  metric_help _help;
+  const registry *_registry;
+  const metric_name _name;
+  const metric_help _help;
   std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>
       _metrics;
+  // For const ref
+  mutable std::shared_mutex _mutex;
 };
 
 class gauge_metric_family : public metric_family {
@@ -189,7 +196,7 @@ template <typename T> class metric : public base_metric {
                 "metric<T> supports numerical types only!");
 
 public:
-  metric(registry *registry, const std::string &name,
+  metric(const registry *registry, const std::string &name,
          const internal::labels_list &labels_list)
       : _registry(registry), _name(name), _labels_list(labels_list), _value(0) {
   }
@@ -197,17 +204,17 @@ public:
   std::string to_string() const override;
 
 protected:
-  T _value;
+  std::atomic<T> _value;
 
 private:
-  registry *_registry;
-  std::string _name;
-  internal::labels_list _labels_list;
+  const registry *_registry;
+  const std::string _name;
+  const internal::labels_list _labels_list;
 };
 
 template <typename T> class gauge : public metric<T> {
 public:
-  gauge(registry *registry, const std::string &name,
+  gauge(const registry *registry, const std::string &name,
         const internal::labels_list &labels_list)
       : metric<T>(registry, name, labels_list) {}
 
@@ -216,7 +223,7 @@ public:
 
 template <typename T> class counter : public metric<T> {
 public:
-  counter(registry *registry, const std::string &name,
+  counter(const registry *registry, const std::string &name,
           const internal::labels_list &labels_list)
       : metric<T>(registry, name, labels_list) {}
 
@@ -224,12 +231,16 @@ public:
 };
 
 inline void metric_family::remove(const internal::labels_list &labels) {
+  std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
   this->_metrics.erase({this->_name, labels});
 }
 
 template <typename T>
 inline std::shared_ptr<internal::base_metric>
 metric_family::add(const internal::labels_list &labels) {
+  std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
   auto [it, inserted] =
       this->_metrics.try_emplace({this->_name, labels}, nullptr);
   if (inserted) {
@@ -252,6 +263,8 @@ public:
   }
 
   void label_set(const internal::label &label) {
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
     this->_registry_labels =
         this->_registry_labels + internal::labels_list({label});
   }
@@ -260,6 +273,8 @@ public:
   std::shared_ptr<internal::gauge<T>>
   gauge(const internal::metric_name &name, const internal::metric_help &help,
         const internal::labels_list &labels_list = {}) {
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
     auto [family, inserted] = this->_families.try_emplace(name, nullptr);
     if (inserted) {
       family->second =
@@ -274,9 +289,12 @@ public:
       return std::make_shared<internal::gauge<T>>(this, name, labels_list);
     }
 
-    auto gauge = family->second->add<internal::gauge<T>>(labels_list);
     this->_metrics.insert({labels_list, name});
 
+    // TODO: refactor
+    lock.unlock();
+
+    auto gauge = family->second->add<internal::gauge<T>>(labels_list);
     return std::dynamic_pointer_cast<internal::gauge<T>>(gauge);
   }
 
@@ -284,6 +302,7 @@ public:
   std::shared_ptr<internal::counter<T>>
   counter(const internal::metric_name &name, const internal::metric_help &help,
           const internal::labels_list &labels_list = {}) {
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
 
     auto [family, inserted] = this->_families.try_emplace(name, nullptr);
     if (inserted) {
@@ -299,14 +318,19 @@ public:
       return std::make_shared<internal::counter<T>>(this, name, labels_list);
     }
 
-    auto counter = family->second->add<internal::counter<T>>(labels_list);
     this->_metrics.insert({labels_list, name});
 
+    // TODO: refactor
+    lock.unlock();
+
+    auto counter = family->second->add<internal::counter<T>>(labels_list);
     return std::dynamic_pointer_cast<internal::counter<T>>(counter);
   }
 
   void remove(const internal::metric_name &name,
               const internal::labels_list &labels_list = {}) {
+    std::shared_lock<std::shared_mutex> lock(this->_mutex);
+
     auto it = this->_families.find(name);
     if (it == this->_families.end()) {
       return;
@@ -316,11 +340,19 @@ public:
   }
 
   void remove(const internal::labels_list &labels_list) {
-    auto range = this->_metrics.equal_range(labels_list);
+    // TODO: typedef
+    std::multimap<internal::labels_list, internal::metric_name> metrics;
+    {
+      std::shared_lock<std::shared_mutex> lock(this->_mutex);
+      metrics = this->_metrics;
+    }
+
+    auto range = metrics.equal_range(labels_list);
     for (auto it = range.first; it != range.second; ++it) {
       this->remove(it->second, it->first);
     }
 
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
     this->_metrics.erase(labels_list);
   }
 
@@ -332,7 +364,15 @@ public:
   }
 
   friend std::ostream &operator<<(std::ostream &os, const registry &r) {
-    std::for_each(r._families.begin(), r._families.end(),
+    // TODO: sep type
+    std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>
+        families;
+    {
+      std::shared_lock<std::shared_mutex> lock(r._mutex);
+      families = r._families;
+    }
+
+    std::for_each(families.begin(), families.end(),
                   [&](const auto &f) -> void { os << *f.second; });
 
     return os;
@@ -343,6 +383,7 @@ private:
   std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>
       _families;
   internal::labels_list _registry_labels;
+  mutable std::shared_mutex _mutex;
 
   template <typename T> friend class internal::metric;
 
@@ -353,16 +394,24 @@ private:
 
 inline std::ostream &
 internal::operator<<(std::ostream &os, const internal::metric_family &family) {
-  if (!family._metrics.size()) {
+  // TODO: sep type
+  std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>
+      metrics;
+  {
+    std::shared_lock<std::shared_mutex> lock(family._mutex);
+    metrics = family._metrics;
+  }
+
+  if (!metrics.size()) {
     return os;
   }
 
   os << "# HELP " << family._name << " " << family._help << std::endl;
   os << "# TYPE " << family._name << " " << family.type() << std::endl;
 
-  std::for_each(
-      family._metrics.begin(), family._metrics.end(),
-      [&](const auto &f) -> void { os << f.second->to_string() << std::endl; });
+  std::for_each(metrics.begin(), metrics.end(), [&](const auto &f) -> void {
+    os << f.second->to_string() << std::endl;
+  });
 
   os << std::endl;
 
@@ -371,10 +420,18 @@ internal::operator<<(std::ostream &os, const internal::metric_family &family) {
 
 template <typename T>
 inline std::string internal::metric<T>::to_string() const {
+  internal::labels_list registry_labels;
+  // TODO: registry_labels too oftern to lock,
+  // should access it once on the registry level and pass to << std::pair()
+  {
+    std::shared_lock<std::shared_mutex> lock(this->_registry->_mutex);
+    registry_labels = this->_registry->_registry_labels;
+  }
+
   std::stringstream ss;
 
-  ss << this->_name << this->_registry->_registry_labels + this->_labels_list
-     << " " << std::to_string(this->_value);
+  ss << this->_name << registry_labels + this->_labels_list << " "
+     << std::to_string(this->_value);
 
   return ss.str();
 }

@@ -7,9 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(GTest CONFIG REQUIRED)
 enable_testing()
 
-file(GLOB TEST_SOURCES "*.cpp")
+file(GLOB TEST_SOURCES "test_*.cpp")
 
 add_executable(runTests ${TEST_SOURCES})
+add_executable(runTsan tsan.cpp)
 
 target_link_libraries(runTests
     PRIVATE
@@ -17,6 +18,8 @@ target_link_libraries(runTests
         GTest::gtest_main
         GTest::gmock
 )
+target_compile_options(runTsan PRIVATE -fsanitize=thread -g -O1)
+target_link_options(runTsan PRIVATE -fsanitize=thread)
 
 include(GoogleTest)
 gtest_discover_tests(runTests)
