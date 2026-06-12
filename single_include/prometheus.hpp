@@ -373,7 +373,7 @@ template <typename T>
 inline std::string internal::metric<T>::to_string() const {
   std::stringstream ss;
 
-  ss << this->_name << this->_labels_list + this->_registry->_registry_labels
+  ss << this->_name << this->_registry->_registry_labels + this->_labels_list
      << " " << std::to_string(this->_value);
 
   return ss.str();

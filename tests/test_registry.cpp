@@ -84,13 +84,13 @@ TEST(RegistryTest, RegistryLabels) {
   auto reg = prometheus::registry::create();
   reg->label_set({"key1", "value1"});
 
-  reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(1);
+  reg->gauge("gauge1", "help1", {{"key1", "value2"}})->set(1);
   reg->gauge("gauge2", "help2", {{"key2", "value2"}})->set(1);
 
   EXPECT_THAT(::testing::PrintToString(*reg),
               "# HELP gauge1 help1\n"
               "# TYPE gauge1 gauge\n"
-              "gauge1{\"key1\"=\"value1\"} 1\n\n"
+              "gauge1{\"key1\"=\"value2\"} 1\n\n"
               "# HELP gauge2 help2\n"
               "# TYPE gauge2 gauge\n"
               "gauge2{\"key1\"=\"value1\",\"key2\"=\"value2\"} 1\n\n");
