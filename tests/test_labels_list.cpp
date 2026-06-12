@@ -10,7 +10,12 @@ TEST(LabelsListTest, OperatorPlus) {
   labels_list l2 = {{"b", "val2"}};
   labels_list l3 = {{"a", "val1"}, {"b", "val2"}};
 
+  labels_list l4 = {{"a", "val1"}};
+  labels_list l5 = {{"a", "val2"}, {"b", "val2"}};
+  labels_list l6 = {{"a", "val2"}, {"b", "val2"}};
+
   EXPECT_EQ(l1 + l2, l3);
+  EXPECT_EQ(l4 + l5, l6);
 }
 
 TEST(LabelsListTest, OperatorEqual) {
