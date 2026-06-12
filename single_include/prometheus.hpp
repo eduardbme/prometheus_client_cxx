@@ -140,6 +140,10 @@ private:
 };
 
 class metric_family {
+private:
+  using metrics_map =
+      std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>;
+
 public:
   metric_family(const registry *registry, const metric_name &name,
                 const metric_help &help)
@@ -159,8 +163,7 @@ private:
   const registry *_registry;
   const metric_name _name;
   const metric_help _help;
-  std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>
-      _metrics;
+  metrics_map _metrics;
   // For const ref
   mutable std::shared_mutex _mutex;
 };
@@ -253,7 +256,13 @@ metric_family::add(const internal::labels_list &labels) {
 } // namespace internal
 
 class registry {
+private:
   class __restricted;
+
+  using metrics_multimap =
+      std::multimap<internal::labels_list, internal::metric_name>;
+  using families_map =
+      std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>;
 
 public:
   registry(__restricted) {}
@@ -312,8 +321,8 @@ public:
   }
 
   void remove(const internal::labels_list &labels_list) {
-    // TODO: typedef
-    std::multimap<internal::labels_list, internal::metric_name> metrics;
+    metrics_multimap metrics;
+
     {
       std::shared_lock<std::shared_mutex> lock(this->_mutex);
       metrics = this->_metrics;
@@ -336,9 +345,8 @@ public:
   }
 
   friend std::ostream &operator<<(std::ostream &os, const registry &r) {
-    // TODO: sep type
-    std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>
-        families;
+    families_map families;
+
     {
       std::shared_lock<std::shared_mutex> lock(r._mutex);
       families = r._families;
@@ -398,9 +406,8 @@ private:
   }
 
 private:
-  std::multimap<internal::labels_list, internal::metric_name> _metrics;
-  std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>
-      _families;
+  metrics_multimap _metrics;
+  families_map _families;
   internal::labels_list _registry_labels;
   mutable std::shared_mutex _mutex;
 
@@ -413,9 +420,8 @@ private:
 
 inline std::ostream &
 internal::operator<<(std::ostream &os, const internal::metric_family &family) {
-  // TODO: sep type
-  std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>
-      metrics;
+  internal::metric_family::metrics_map metrics;
+
   {
     std::shared_lock<std::shared_mutex> lock(family._mutex);
     metrics = family._metrics;
