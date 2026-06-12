@@ -273,28 +273,14 @@ public:
   std::shared_ptr<internal::gauge<T>>
   gauge(const internal::metric_name &name, const internal::metric_help &help,
         const internal::labels_list &labels_list = {}) {
-    std::unique_lock<std::shared_mutex> lock(this->_mutex);
-
-    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
-    if (inserted) {
-      family->second =
-          std::make_shared<internal::gauge_metric_family>(this, name, help);
-    }
-
-    if (auto f = std::dynamic_pointer_cast<internal::gauge_metric_family>(
-            family->second);
-        !f) {
+    auto gauge_family = this->gauge_family(name, help, labels_list);
+    if (!gauge_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
       return std::make_shared<internal::gauge<T>>(this, name, labels_list);
     }
 
-    this->_metrics.insert({labels_list, name});
-
-    // TODO: refactor
-    lock.unlock();
-
-    auto gauge = family->second->add<internal::gauge<T>>(labels_list);
+    auto gauge = gauge_family->add<internal::gauge<T>>(labels_list);
     return std::dynamic_pointer_cast<internal::gauge<T>>(gauge);
   }
 
@@ -302,28 +288,14 @@ public:
   std::shared_ptr<internal::counter<T>>
   counter(const internal::metric_name &name, const internal::metric_help &help,
           const internal::labels_list &labels_list = {}) {
-    std::unique_lock<std::shared_mutex> lock(this->_mutex);
-
-    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
-    if (inserted) {
-      family->second =
-          std::make_shared<internal::counter_metric_family>(this, name, help);
-    }
-
-    if (auto f = std::dynamic_pointer_cast<internal::counter_metric_family>(
-            family->second);
-        !f) {
+    auto counter_family = this->counter_family(name, help, labels_list);
+    if (!counter_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
       return std::make_shared<internal::counter<T>>(this, name, labels_list);
     }
 
-    this->_metrics.insert({labels_list, name});
-
-    // TODO: refactor
-    lock.unlock();
-
-    auto counter = family->second->add<internal::counter<T>>(labels_list);
+    auto counter = counter_family->add<internal::counter<T>>(labels_list);
     return std::dynamic_pointer_cast<internal::counter<T>>(counter);
   }
 
@@ -376,6 +348,53 @@ public:
                   [&](const auto &f) -> void { os << *f.second; });
 
     return os;
+  }
+
+private:
+  std::shared_ptr<internal::gauge_metric_family>
+  gauge_family(const internal::metric_name &name,
+               const internal::metric_help &help,
+               const internal::labels_list &labels_list = {}) {
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
+    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
+    if (inserted) {
+      family->second =
+          std::make_shared<internal::gauge_metric_family>(this, name, help);
+    }
+
+    auto f = std::dynamic_pointer_cast<internal::gauge_metric_family>(
+        family->second);
+    if (!f) {
+      return f;
+    }
+
+    this->_metrics.insert({labels_list, name});
+
+    return f;
+  }
+
+  std::shared_ptr<internal::counter_metric_family>
+  counter_family(const internal::metric_name &name,
+                 const internal::metric_help &help,
+                 const internal::labels_list &labels_list = {}) {
+    std::unique_lock<std::shared_mutex> lock(this->_mutex);
+
+    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
+    if (inserted) {
+      family->second =
+          std::make_shared<internal::counter_metric_family>(this, name, help);
+    }
+
+    auto f = std::dynamic_pointer_cast<internal::counter_metric_family>(
+        family->second);
+    if (!f) {
+      return f;
+    }
+
+    this->_metrics.insert({labels_list, name});
+
+    return f;
   }
 
 private:

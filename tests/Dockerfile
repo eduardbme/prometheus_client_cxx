@@ -32,6 +32,7 @@ COPY tests/ ./tests/
 WORKDIR /app/tests
 
 ENV GTest_DIR=/third_party/googletest/build/lib/cmake/GTest
+ENV TSAN_OPTIONS="verbosity=1"
 
 RUN cmake -B build -S . && \
     cmake --build build
