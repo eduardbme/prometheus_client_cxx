@@ -25,9 +25,6 @@ class registry;
 
 namespace internal {
 
-using metric_name = std::string;
-using metric_help = std::string;
-
 class label;
 class labels_list;
 class metric_family;
@@ -36,7 +33,13 @@ template <typename T> class metric;
 template <typename T> class gauge;
 template <typename T> class counter;
 
-std::ostream &operator<<(std::ostream &os, const metric_family &family);
+using metric_name = std::string;
+using metric_help = std::string;
+using metric_family_out_data =
+    std::pair<const internal::labels_list &, const internal::metric_family &>;
+
+std::ostream &operator<<(std::ostream &os,
+                         const metric_family_out_data &family_data);
 
 // Immutable
 class label {
@@ -145,9 +148,8 @@ private:
       std::map<internal::metric_key, std::shared_ptr<internal::base_metric>>;
 
 public:
-  metric_family(const registry *registry, const metric_name &name,
-                const metric_help &help)
-      : _registry(registry), _name(name), _help(help) {}
+  metric_family(const metric_name &name, const metric_help &help)
+      : _name(name), _help(help) {}
 
   template <typename T>
   std::shared_ptr<internal::base_metric>
@@ -156,11 +158,11 @@ public:
 
   virtual std::string type() const = 0;
 
-  friend std::ostream &internal::operator<<(std::ostream &os,
-                                            const internal::metric_family &m);
+  friend std::ostream &
+  internal::operator<<(std::ostream &os,
+                       const metric_family_out_data &family_data);
 
 private:
-  const registry *_registry;
   const metric_name _name;
   const metric_help _help;
   metrics_map _metrics;
@@ -170,18 +172,16 @@ private:
 
 class gauge_metric_family : public metric_family {
 public:
-  gauge_metric_family(registry *registry, const metric_name &name,
-                      const metric_help &help)
-      : metric_family(registry, name, help) {}
+  gauge_metric_family(const metric_name &name, const metric_help &help)
+      : metric_family(name, help) {}
 
   std::string type() const override { return "gauge"; };
 };
 
 class counter_metric_family : public metric_family {
 public:
-  counter_metric_family(registry *registry, const metric_name &name,
-                        const metric_help &help)
-      : metric_family(registry, name, help) {}
+  counter_metric_family(const metric_name &name, const metric_help &help)
+      : metric_family(name, help) {}
 
   std::string type() const override { return "counter"; };
 };
@@ -191,7 +191,8 @@ public:
 class base_metric {
 public:
   virtual ~base_metric() = default;
-  virtual std::string to_string() const = 0;
+  virtual std::string
+  to_string(const internal::labels_list &registry_labels) const = 0;
 };
 
 template <typename T> class metric : public base_metric {
@@ -199,36 +200,32 @@ template <typename T> class metric : public base_metric {
                 "metric<T> supports numerical types only!");
 
 public:
-  metric(const registry *registry, const std::string &name,
-         const internal::labels_list &labels_list)
-      : _registry(registry), _name(name), _labels_list(labels_list), _value(0) {
-  }
+  metric(const std::string &name, const internal::labels_list &labels_list)
+      : _name(name), _labels_list(labels_list), _value(0) {}
 
-  std::string to_string() const override;
+  std::string
+  to_string(const internal::labels_list &registry_labels) const override;
 
 protected:
   std::atomic<T> _value;
 
 private:
-  const registry *_registry;
   const std::string _name;
   const internal::labels_list _labels_list;
 };
 
 template <typename T> class gauge : public metric<T> {
 public:
-  gauge(const registry *registry, const std::string &name,
-        const internal::labels_list &labels_list)
-      : metric<T>(registry, name, labels_list) {}
+  gauge(const std::string &name, const internal::labels_list &labels_list)
+      : metric<T>(name, labels_list) {}
 
   void set(T value) { this->_value = value; }
 };
 
 template <typename T> class counter : public metric<T> {
 public:
-  counter(const registry *registry, const std::string &name,
-          const internal::labels_list &labels_list)
-      : metric<T>(registry, name, labels_list) {}
+  counter(const std::string &name, const internal::labels_list &labels_list)
+      : metric<T>(name, labels_list) {}
 
   void inc(T value = 1) { this->_value += value; }
 };
@@ -247,7 +244,7 @@ metric_family::add(const internal::labels_list &labels) {
   auto [it, inserted] =
       this->_metrics.try_emplace({this->_name, labels}, nullptr);
   if (inserted) {
-    it->second = std::make_shared<T>(this->_registry, this->_name, labels);
+    it->second = std::make_shared<T>(this->_name, labels);
   }
 
   return it->second;
@@ -286,7 +283,7 @@ public:
     if (!gauge_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::gauge<T>>(this, name, labels_list);
+      return std::make_shared<internal::gauge<T>>(name, labels_list);
     }
 
     auto gauge = gauge_family->add<internal::gauge<T>>(labels_list);
@@ -301,7 +298,7 @@ public:
     if (!counter_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::counter<T>>(this, name, labels_list);
+      return std::make_shared<internal::counter<T>>(name, labels_list);
     }
 
     auto counter = counter_family->add<internal::counter<T>>(labels_list);
@@ -346,14 +343,17 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os, const registry &r) {
     families_map families;
+    internal::labels_list registry_labels;
 
     {
       std::shared_lock<std::shared_mutex> lock(r._mutex);
       families = r._families;
+      registry_labels = r._registry_labels;
     }
 
-    std::for_each(families.begin(), families.end(),
-                  [&](const auto &f) -> void { os << *f.second; });
+    std::for_each(families.begin(), families.end(), [&](const auto &f) -> void {
+      os << std::make_pair(std::ref(registry_labels), std::ref(*f.second));
+    });
 
     return os;
   }
@@ -368,7 +368,7 @@ private:
     auto [family, inserted] = this->_families.try_emplace(name, nullptr);
     if (inserted) {
       family->second =
-          std::make_shared<internal::gauge_metric_family>(this, name, help);
+          std::make_shared<internal::gauge_metric_family>(name, help);
     }
 
     auto f = std::dynamic_pointer_cast<internal::gauge_metric_family>(
@@ -391,7 +391,7 @@ private:
     auto [family, inserted] = this->_families.try_emplace(name, nullptr);
     if (inserted) {
       family->second =
-          std::make_shared<internal::counter_metric_family>(this, name, help);
+          std::make_shared<internal::counter_metric_family>(name, help);
     }
 
     auto f = std::dynamic_pointer_cast<internal::counter_metric_family>(
@@ -419,7 +419,9 @@ private:
 };
 
 inline std::ostream &
-internal::operator<<(std::ostream &os, const internal::metric_family &family) {
+internal::operator<<(std::ostream &os,
+                     const internal::metric_family_out_data &family_data) {
+  auto [registry_labels, family] = family_data;
   internal::metric_family::metrics_map metrics;
 
   {
@@ -435,7 +437,7 @@ internal::operator<<(std::ostream &os, const internal::metric_family &family) {
   os << "# TYPE " << family._name << " " << family.type() << std::endl;
 
   std::for_each(metrics.begin(), metrics.end(), [&](const auto &f) -> void {
-    os << f.second->to_string() << std::endl;
+    os << f.second->to_string(registry_labels) << std::endl;
   });
 
   os << std::endl;
@@ -444,15 +446,8 @@ internal::operator<<(std::ostream &os, const internal::metric_family &family) {
 }
 
 template <typename T>
-inline std::string internal::metric<T>::to_string() const {
-  internal::labels_list registry_labels;
-  // TODO: registry_labels too oftern to lock,
-  // should access it once on the registry level and pass to << std::pair()
-  {
-    std::shared_lock<std::shared_mutex> lock(this->_registry->_mutex);
-    registry_labels = this->_registry->_registry_labels;
-  }
-
+inline std::string internal::metric<T>::to_string(
+    const internal::labels_list &registry_labels) const {
   std::stringstream ss;
 
   ss << this->_name << registry_labels + this->_labels_list << " "
