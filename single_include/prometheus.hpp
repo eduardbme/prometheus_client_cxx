@@ -256,8 +256,8 @@ class registry {
 private:
   class __restricted;
 
-  using metrics_multimap =
-      std::multimap<internal::labels_list, internal::metric_name>;
+  using metrics_map =
+      std::map<internal::labels_list, std::set<internal::metric_name>>;
   using families_map =
       std::map<internal::metric_name, std::shared_ptr<internal::metric_family>>;
 
@@ -318,16 +318,20 @@ public:
   }
 
   void remove(const internal::labels_list &labels_list) {
-    metrics_multimap metrics;
+    metrics_map metrics;
 
     {
       std::shared_lock<std::shared_mutex> lock(this->_mutex);
       metrics = this->_metrics;
     }
 
-    auto range = metrics.equal_range(labels_list);
-    for (auto it = range.first; it != range.second; ++it) {
-      this->remove(it->second, it->first);
+    auto it = metrics.find(labels_list);
+    if (it == metrics.end()) {
+      return;
+    }
+
+    for (const auto &metric_name : it->second) {
+      this->remove(metric_name, it->first);
     }
 
     std::unique_lock<std::shared_mutex> lock(this->_mutex);
@@ -365,8 +369,8 @@ private:
                const internal::labels_list &labels_list = {}) {
     std::unique_lock<std::shared_mutex> lock(this->_mutex);
 
-    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
-    if (inserted) {
+    auto [family, family_inserted] = this->_families.try_emplace(name, nullptr);
+    if (family_inserted) {
       family->second =
           std::make_shared<internal::gauge_metric_family>(name, help);
     }
@@ -377,7 +381,8 @@ private:
       return f;
     }
 
-    this->_metrics.insert({labels_list, name});
+    auto [metric, _1] = this->_metrics.try_emplace(labels_list);
+    metric->second.insert(name);
 
     return f;
   }
@@ -388,8 +393,8 @@ private:
                  const internal::labels_list &labels_list = {}) {
     std::unique_lock<std::shared_mutex> lock(this->_mutex);
 
-    auto [family, inserted] = this->_families.try_emplace(name, nullptr);
-    if (inserted) {
+    auto [family, family_inserted] = this->_families.try_emplace(name, nullptr);
+    if (family_inserted) {
       family->second =
           std::make_shared<internal::counter_metric_family>(name, help);
     }
@@ -400,13 +405,14 @@ private:
       return f;
     }
 
-    this->_metrics.insert({labels_list, name});
+    auto [metric, _1] = this->_metrics.try_emplace(labels_list);
+    metric->second.insert(name);
 
     return f;
   }
 
 private:
-  metrics_multimap _metrics;
+  metrics_map _metrics;
   families_map _families;
   internal::labels_list _registry_labels;
   mutable std::shared_mutex _mutex;
