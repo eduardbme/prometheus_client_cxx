@@ -33,8 +33,9 @@ WORKDIR /app/tests
 
 ENV GTest_DIR=/third_party/googletest/build/lib/cmake/GTest
 ENV TSAN_OPTIONS="verbosity=1"
+ENV ASAN_OPTIONS="detect_leaks=1:verbosity=1"
 
 RUN cmake -B build -S . && \
     cmake --build build
 
-CMD ["sh", "-c", "ctest --test-dir build --output-on-failure && ./build/runTsan"]
+CMD ["sh", "-c", "ctest --test-dir build --output-on-failure && ./build/runTsan && ./build/runAsan"]

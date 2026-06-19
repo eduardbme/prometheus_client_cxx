@@ -11,6 +11,7 @@ file(GLOB TEST_SOURCES "test_*.cpp")
 
 add_executable(runTests ${TEST_SOURCES})
 add_executable(runTsan tsan.cpp)
+add_executable(runAsan tsan.cpp)
 
 target_link_libraries(runTests
     PRIVATE
@@ -18,8 +19,12 @@ target_link_libraries(runTests
         GTest::gtest_main
         GTest::gmock
 )
-target_compile_options(runTsan PRIVATE -fsanitize=thread -g -O1)
+
+target_compile_options(runTsan PRIVATE -fsanitize=thread -g -O0)
 target_link_options(runTsan PRIVATE -fsanitize=thread)
+
+target_compile_options(runAsan PRIVATE -fsanitize=address -g -O0)
+target_link_options(runAsan PRIVATE -fsanitize=address)
 
 include(GoogleTest)
 gtest_discover_tests(runTests)

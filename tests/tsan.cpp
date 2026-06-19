@@ -3,9 +3,6 @@
 
 #include "../single_include/prometheus.hpp"
 
-const int n_iters = 1e3;
-auto reg = prometheus::registry::create();
-
 void set_handler(std::shared_ptr<prometheus::registry> reg, int n_iters) {
   std::stringstream ss;
 
@@ -46,6 +43,9 @@ void out_handler(std::shared_ptr<prometheus::registry> reg, int n_iters) {
 }
 
 int main() {
+  const int n_iters = 1e3;
+  auto reg = prometheus::registry::create();
+
   std::thread set_thread(set_handler, reg, n_iters);
   std::thread remove_thread(remove_handler, reg, n_iters);
   std::thread out_thread(out_handler, reg, n_iters);
