@@ -95,3 +95,33 @@ TEST(RegistryTest, RegistryLabels) {
               "# TYPE gauge2 gauge\n"
               "gauge2{\"key1\"=\"value1\",\"key2\"=\"value2\"} 1\n\n");
 }
+
+TEST(RegistryTest, RegistryEmptyPrefix) {
+  auto reg = prometheus::registry::create();
+  reg->prefix_set("");
+
+  reg->counter("counter1", "help1");
+  reg->gauge("gauge1", "help2");
+
+  EXPECT_THAT(::testing::PrintToString(*reg), "# HELP counter1 help1\n"
+                                              "# TYPE counter1 counter\n"
+                                              "counter1 0\n\n"
+                                              "# HELP gauge1 help2\n"
+                                              "# TYPE gauge1 gauge\n"
+                                              "gauge1 0\n\n");
+}
+
+TEST(RegistryTest, RegistryPrefix) {
+  auto reg = prometheus::registry::create();
+  reg->prefix_set("prefix");
+
+  reg->counter("counter1", "help1");
+  reg->gauge("gauge1", "help2");
+
+  EXPECT_THAT(::testing::PrintToString(*reg), "# HELP counter1 help1\n"
+                                              "# TYPE counter1 counter\n"
+                                              "prefix_counter1 0\n\n"
+                                              "# HELP gauge1 help2\n"
+                                              "# TYPE gauge1 gauge\n"
+                                              "prefix_gauge1 0\n\n");
+}

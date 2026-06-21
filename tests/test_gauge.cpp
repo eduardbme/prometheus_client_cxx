@@ -3,7 +3,17 @@
 
 #include "../single_include/prometheus.hpp"
 
-TEST(GaugeTest, Gauge) {
+TEST(GaugeTest, DefaultValue) {
+  auto reg = prometheus::registry::create();
+
+  reg->gauge("gauge1", "help1");
+
+  EXPECT_THAT(::testing::PrintToString(*reg), "# HELP gauge1 help1\n"
+                                              "# TYPE gauge1 gauge\n"
+                                              "gauge1 0\n\n");
+}
+
+TEST(GaugeTest, GaugeUpdate) {
   auto reg = prometheus::registry::create();
 
   reg->gauge("gauge1", "help1")->set(1);
@@ -11,17 +21,6 @@ TEST(GaugeTest, Gauge) {
   EXPECT_THAT(::testing::PrintToString(*reg), "# HELP gauge1 help1\n"
                                               "# TYPE gauge1 gauge\n"
                                               "gauge1 1\n\n");
-}
-
-TEST(GaugeTest, GaugeUpdate) {
-  auto reg = prometheus::registry::create();
-
-  reg->gauge("gauge1", "help1")->set(1);
-  reg->gauge("gauge1", "help1")->set(2);
-
-  EXPECT_THAT(::testing::PrintToString(*reg), "# HELP gauge1 help1\n"
-                                              "# TYPE gauge1 gauge\n"
-                                              "gauge1 2\n\n");
 }
 
 TEST(GaugeTest, GaugeWithLabel) {
@@ -39,43 +38,41 @@ TEST(GaugeTest, GaugeWithLabelUpdate) {
   auto reg = prometheus::registry::create();
 
   reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(1);
-  reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(2);
 
   EXPECT_THAT(::testing::PrintToString(*reg),
               "# HELP gauge1 help1\n"
               "# TYPE gauge1 gauge\n"
-              "gauge1{\"key1\"=\"value1\"} 2\n\n");
+              "gauge1{\"key1\"=\"value1\"} 1\n\n");
 }
 
 TEST(GaugeTest, GaugeWithLabel_LabelsOrder) {
   auto reg = prometheus::registry::create();
 
-  reg->gauge("gauge1", "help1", {{"key1", "value1"}, {"key2", "value2"}})
-      ->set(1);
+  reg->gauge("gauge1", "help1", {{"key1", "value1"}, {"key2", "value2"}});
   reg->gauge("gauge1", "help1", {{"key2", "value2"}, {"key1", "value1"}})
-      ->set(2);
+      ->set(1);
 
   EXPECT_THAT(::testing::PrintToString(*reg),
               "# HELP gauge1 help1\n"
               "# TYPE gauge1 gauge\n"
-              "gauge1{\"key1\"=\"value1\",\"key2\"=\"value2\"} 2\n\n");
+              "gauge1{\"key1\"=\"value1\",\"key2\"=\"value2\"} 1\n\n");
 }
 
 TEST(GaugeTest, GaugeFamily) {
   auto reg = prometheus::registry::create();
 
-  reg->gauge("gauge1", "help1")->set(1);
-  reg->gauge("gauge1", "help1", {{"key1", "value1"}})->set(2);
-  reg->gauge("gauge1", "help1", {{"key1", "value2"}})->set(3);
-  reg->gauge("gauge1", "help1", {{"key2", "value1"}})->set(4);
+  reg->gauge("gauge1", "help1");
+  reg->gauge("gauge1", "help1", {{"key1", "value1"}});
+  reg->gauge("gauge1", "help1", {{"key1", "value2"}});
+  reg->gauge("gauge1", "help1", {{"key2", "value1"}});
 
   EXPECT_THAT(::testing::PrintToString(*reg),
               "# HELP gauge1 help1\n"
               "# TYPE gauge1 gauge\n"
-              "gauge1 1\n"
-              "gauge1{\"key1\"=\"value1\"} 2\n"
-              "gauge1{\"key1\"=\"value2\"} 3\n"
-              "gauge1{\"key2\"=\"value1\"} 4\n\n");
+              "gauge1 0\n"
+              "gauge1{\"key1\"=\"value1\"} 0\n"
+              "gauge1{\"key1\"=\"value2\"} 0\n"
+              "gauge1{\"key2\"=\"value1\"} 0\n\n");
 }
 
 TEST(GaugeTest, GaugeNumericTypeOnly) {

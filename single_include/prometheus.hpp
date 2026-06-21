@@ -58,11 +58,12 @@ class base_metric;
 template <typename T> class metric;
 template <typename T> class gauge;
 template <typename T> class counter;
+class metric_family_out_data;
 
+using registry_labels = labels_list;
+using registry_prefix = std::string;
 using metric_name = std::string;
 using metric_help = std::string;
-using metric_family_out_data =
-    std::pair<const internal::labels_list &, const internal::metric_family &>;
 
 std::ostream &operator<<(std::ostream &os,
                          const metric_family_out_data &family_data);
@@ -155,17 +156,16 @@ private:
 
 class metric_key {
 public:
-  metric_key(const metric_name &name, const internal::labels_list &labels_list)
-      : _name(name), _labels_list(labels_list) {}
+  metric_key(const metric_name &name, const internal::labels_list &labels)
+      : _name(name), _labels(labels) {}
 
   bool operator<(const metric_key &rhs) const {
-    return std::tie(_name, _labels_list) <
-           std::tie(rhs._name, rhs._labels_list);
+    return std::tie(_name, _labels) < std::tie(rhs._name, rhs._labels);
   }
 
 private:
   std::string _name;
-  internal::labels_list _labels_list;
+  internal::labels_list _labels;
 };
 
 class metric_family {
@@ -186,7 +186,7 @@ public:
 
   friend std::ostream &
   internal::operator<<(std::ostream &os,
-                       const metric_family_out_data &family_data);
+                       const internal::metric_family_out_data &family_data);
 
 private:
   const metric_name _name;
@@ -218,7 +218,8 @@ class base_metric {
 public:
   virtual ~base_metric() = default;
   virtual std::string
-  to_string(const internal::labels_list &registry_labels) const = 0;
+  to_string(const internal::registry_prefix &prefix,
+            const internal::registry_labels &labels) const = 0;
 };
 
 template <typename T> class metric : public base_metric {
@@ -229,8 +230,8 @@ public:
   metric(const std::string &name, const internal::labels_list &labels_list)
       : _name(name), _labels_list(labels_list), _value(0) {}
 
-  std::string
-  to_string(const internal::labels_list &registry_labels) const override;
+  std::string to_string(const internal::registry_prefix &prefix,
+                        const internal::registry_labels &labels) const override;
 
 protected:
   std::atomic<T> _value;
@@ -254,6 +255,12 @@ public:
       : metric<T>(name, labels_list) {}
 
   void inc(T value = 1) { this->_value += value; }
+};
+
+struct metric_family_out_data {
+  const internal::registry_prefix &registry_prefix;
+  const internal::registry_labels &registry_labels;
+  const internal::metric_family &family;
 };
 
 inline void metric_family::remove(const internal::labels_list &labels) {
@@ -297,8 +304,11 @@ public:
   void label_set(const internal::label &label) {
     std::unique_lock<std::shared_mutex> lock(this->_mutex);
 
-    this->_registry_labels =
-        this->_registry_labels + internal::labels_list({label});
+    this->_labels = this->_labels + internal::labels_list({label});
+  }
+
+  void prefix_set(const internal::registry_prefix &prefix) {
+    this->_prefix = prefix;
   }
 
   template <typename T = int>
@@ -373,16 +383,20 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os, const registry &r) {
     families_map families;
-    internal::labels_list registry_labels;
+    internal::registry_prefix prefix;
+    internal::registry_labels labels;
 
     {
       std::shared_lock<std::shared_mutex> lock(r._mutex);
       families = r._families;
-      registry_labels = r._registry_labels;
+      prefix = r._prefix;
+      labels = r._labels;
     }
 
     std::for_each(families.begin(), families.end(), [&](const auto &f) -> void {
-      os << std::make_pair(std::ref(registry_labels), std::ref(*f.second));
+      os << internal::metric_family_out_data{std::ref(prefix), std::ref(labels),
+
+                                             std::ref(*f.second)};
     });
 
     return os;
@@ -440,7 +454,8 @@ private:
 private:
   metrics_map _metrics;
   families_map _families;
-  internal::labels_list _registry_labels;
+  internal::registry_prefix _prefix;
+  internal::labels_list _labels;
   mutable std::shared_mutex _mutex;
 
   template <typename T> friend class internal::metric;
@@ -453,7 +468,7 @@ private:
 inline std::ostream &
 internal::operator<<(std::ostream &os,
                      const internal::metric_family_out_data &family_data) {
-  auto [registry_labels, family] = family_data;
+  const auto &[registry_prefix, registry_labels, family] = family_data;
   internal::metric_family::metrics_map metrics;
 
   {
@@ -469,7 +484,7 @@ internal::operator<<(std::ostream &os,
   os << "# TYPE " << family._name << " " << family.type() << std::endl;
 
   std::for_each(metrics.begin(), metrics.end(), [&](const auto &f) -> void {
-    os << f.second->to_string(registry_labels) << std::endl;
+    os << f.second->to_string(registry_prefix, registry_labels) << std::endl;
   });
 
   os << std::endl;
@@ -478,11 +493,14 @@ internal::operator<<(std::ostream &os,
 }
 
 template <typename T>
-inline std::string internal::metric<T>::to_string(
-    const internal::labels_list &registry_labels) const {
+inline std::string
+internal::metric<T>::to_string(const internal::registry_prefix &prefix,
+                               const internal::registry_labels &labels) const {
   std::stringstream ss;
 
-  ss << this->_name << registry_labels + this->_labels_list << " "
+  auto name = prefix.size() ? prefix + "_" + this->_name : this->_name;
+
+  ss << name << labels + this->_labels_list << " "
      << std::to_string(this->_value);
 
   return ss.str();

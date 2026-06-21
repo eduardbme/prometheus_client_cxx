@@ -3,7 +3,17 @@
 
 #include "../single_include/prometheus.hpp"
 
-TEST(CounterTest, CounterWithoutLabel) {
+TEST(CounterTest, DefaultValue) {
+  auto reg = prometheus::registry::create();
+
+  reg->counter("counter1", "help1");
+
+  EXPECT_THAT(::testing::PrintToString(*reg), "# HELP counter1 help1\n"
+                                              "# TYPE counter1 counter\n"
+                                              "counter1 0\n\n");
+}
+
+TEST(CounterTest, Inc) {
   auto reg = prometheus::registry::create();
 
   reg->counter("counter1", "help1")->inc();
