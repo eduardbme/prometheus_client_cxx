@@ -79,8 +79,11 @@ TEST(GaugeTest, GaugeNumericTypeOnly) {
   auto reg = prometheus::registry::create();
 
   // compile time error
-  // reg->gauge<std::string>("incorrect1", "help1")
-  //     ->set("");
+  // reg->gauge<std::string>("incorrect1", "help1")->set("");
+
+  // compile time error
+  // int != float
+  // reg->gauge("gauge1", "help1")->set(std::numeric_limits<float>::max());
 
   reg->gauge("gauge1", "help1", {{"key", "test1"}})
       ->set(std::numeric_limits<int>::max());
@@ -88,7 +91,7 @@ TEST(GaugeTest, GaugeNumericTypeOnly) {
       ->set(std::numeric_limits<float>::max());
   reg->gauge<double>("gauge1", "help1", {{"key", "test3"}})
       ->set(std::numeric_limits<double>::max());
-  reg->gauge<size_t>("gauge1", "help1", {{"key", "test4"}})
+  reg->gauge<std::size_t>("gauge1", "help1", {{"key", "test4"}})
       ->set(std::numeric_limits<std::size_t>::max());
 
   EXPECT_THAT(::testing::PrintToString(*reg),

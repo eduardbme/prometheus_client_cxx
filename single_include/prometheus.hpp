@@ -274,7 +274,10 @@ public:
   gauge(const std::string &name, const internal::labels_list &labels_list)
       : internal::metric<T>(name, labels_list) {}
 
-  void set(T value) { this->_value = value; }
+  template <typename U = T> void set(U value) {
+    static_assert(std::is_same_v<U, T>, "Invalid type");
+    this->_value = value;
+  }
 };
 
 template <typename T = int> class counter : public internal::metric<T> {
@@ -282,7 +285,10 @@ public:
   counter(const std::string &name, const internal::labels_list &labels_list)
       : internal::metric<T>(name, labels_list) {}
 
-  void inc(T value = 1) { this->_value += value; }
+  template <typename U = T> void inc(U value = 1) {
+    static_assert(std::is_same_v<U, T>, "Invalid type");
+    this->_value += value;
+  }
 };
 
 class registry {

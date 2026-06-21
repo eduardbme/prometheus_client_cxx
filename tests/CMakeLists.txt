@@ -3,6 +3,7 @@ project(prometheus_client_cxx_tests LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 find_package(GTest CONFIG REQUIRED)
 enable_testing()
