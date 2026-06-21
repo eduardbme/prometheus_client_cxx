@@ -48,6 +48,8 @@ constexpr std::string_view OPENMETRICS_V100 =
     "application/openmetrics-text; version=1.0.0; charset=utf-8";
 
 class registry;
+template <typename T> class gauge;
+template <typename T> class counter;
 
 namespace internal {
 
@@ -56,8 +58,6 @@ class labels_list;
 class metric_family;
 class base_metric;
 template <typename T> class metric;
-template <typename T> class gauge;
-template <typename T> class counter;
 class metric_family_out_data;
 
 using registry_labels = labels_list;
@@ -241,22 +241,6 @@ private:
   const internal::labels_list _labels_list;
 };
 
-template <typename T> class gauge : public metric<T> {
-public:
-  gauge(const std::string &name, const internal::labels_list &labels_list)
-      : metric<T>(name, labels_list) {}
-
-  void set(T value) { this->_value = value; }
-};
-
-template <typename T> class counter : public metric<T> {
-public:
-  counter(const std::string &name, const internal::labels_list &labels_list)
-      : metric<T>(name, labels_list) {}
-
-  void inc(T value = 1) { this->_value += value; }
-};
-
 struct metric_family_out_data {
   const internal::registry_prefix &registry_prefix;
   const internal::registry_labels &registry_labels;
@@ -285,6 +269,22 @@ metric_family::add(const internal::labels_list &labels) {
 
 } // namespace internal
 
+template <typename T = int> class gauge : public internal::metric<T> {
+public:
+  gauge(const std::string &name, const internal::labels_list &labels_list)
+      : internal::metric<T>(name, labels_list) {}
+
+  void set(T value) { this->_value = value; }
+};
+
+template <typename T = int> class counter : public internal::metric<T> {
+public:
+  counter(const std::string &name, const internal::labels_list &labels_list)
+      : internal::metric<T>(name, labels_list) {}
+
+  void inc(T value = 1) { this->_value += value; }
+};
+
 class registry {
 private:
   class __restricted;
@@ -312,33 +312,33 @@ public:
   }
 
   template <typename T = int>
-  std::shared_ptr<internal::gauge<T>>
+  std::shared_ptr<prometheus::gauge<T>>
   gauge(const internal::metric_name &name, const internal::metric_help &help,
         const internal::labels_list &labels_list = {}) {
     auto gauge_family = this->gauge_family(name, help, labels_list);
     if (!gauge_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::gauge<T>>(name, labels_list);
+      return std::make_shared<prometheus::gauge<T>>(name, labels_list);
     }
 
-    auto gauge = gauge_family->add<internal::gauge<T>>(labels_list);
-    return std::dynamic_pointer_cast<internal::gauge<T>>(gauge);
+    auto gauge = gauge_family->add<prometheus::gauge<T>>(labels_list);
+    return std::dynamic_pointer_cast<prometheus::gauge<T>>(gauge);
   }
 
   template <typename T = int>
-  std::shared_ptr<internal::counter<T>>
+  std::shared_ptr<prometheus::counter<T>>
   counter(const internal::metric_name &name, const internal::metric_help &help,
           const internal::labels_list &labels_list = {}) {
     auto counter_family = this->counter_family(name, help, labels_list);
     if (!counter_family) {
       // Prevent potential SEGFAULT by returning nullptr for a mismatch family
       // type. Return untraceable throw-away object.
-      return std::make_shared<internal::counter<T>>(name, labels_list);
+      return std::make_shared<prometheus::counter<T>>(name, labels_list);
     }
 
-    auto counter = counter_family->add<internal::counter<T>>(labels_list);
-    return std::dynamic_pointer_cast<internal::counter<T>>(counter);
+    auto counter = counter_family->add<prometheus::counter<T>>(labels_list);
+    return std::dynamic_pointer_cast<prometheus::counter<T>>(counter);
   }
 
   void remove(const internal::metric_name &name,
