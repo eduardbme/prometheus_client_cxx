@@ -13,6 +13,7 @@
 There are myriads of [Prometheus](https://prometheus.io/) libraries out there, and each may even have its reason to exist. Our library had these design goals:
 
 - **Interface-agnostic**. No http server or any other interface is included. Check out the [stdout example](#stdout) and [http example](#http).
+- **Trivial integration**. Our whole code consists of a single header file [`prometheus.hpp`](https://github.com/eduardbme/prometheus_client_cxx/blob/main/single_include/prometheus.hpp). That's it. No library, no subproject, no dependencies, no complex build system. The class is written in vanilla C++17. All in all, everything should require no adjustment of your compiler flags or project settings.
 
 ## Examples
 
