@@ -21,7 +21,7 @@
 //  \____||__|__||__|__|
 //
 //  Prometheus Client C++
-//  version 0.0.0
+//  version 1.0.0
 //  https://github.com/eduardbme/prometheus_client_cxx
 
 #ifndef PROMETHEUS_CLIENT_CXX_HPP_
