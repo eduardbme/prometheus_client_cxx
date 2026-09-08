@@ -18,4 +18,13 @@ jobs:
         run: docker build -t prometheus_client_cxx_tests -f ./tests/Dockerfile .
 
       - name: Run tests
-        run: docker run --rm prometheus_client_cxx_tests
+        run: |
+          mkdir -p .coverage
+          docker run --rm -v ${{ github.workspace }}/.coverage:/coverage prometheus_client_cxx_tests
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ github.workspace }}/.coverage/coverage.filtered.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true

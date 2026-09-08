@@ -10,6 +10,7 @@ RUN apt-get update && \
         wget \
         curl \
         gcc-14 g++-14 \
+        lcov \
         && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /third_party
@@ -18,7 +19,8 @@ COPY third_party/googletest/ ./googletest
 
 RUN mkdir -p googletest/build && cd googletest/build && \
     cmake ../ \
-          -DCMAKE_BUILD_TYPE=Release \
+          -DENABLE_COVERAGE=ON \
+          -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_CXX_STANDARD=17 \
           -DCMAKE_INSTALL_PREFIX=. && \
     make -j$(nproc) && \
@@ -38,4 +40,4 @@ ENV ASAN_OPTIONS="detect_leaks=1:verbosity=1"
 RUN cmake -B build -S . && \
     cmake --build build
 
-CMD ["sh", "-c", "ctest --test-dir build --output-on-failure && ./build/runTsan && ./build/runAsan"]
+CMD ["./run_tests.sh"]
