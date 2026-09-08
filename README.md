@@ -1,5 +1,9 @@
 # prometheus_client_cxx
 
+[![codecov](https://codecov.io/gh/eduardbme/prometheus_client_cxx/graph/badge.svg?token=S364F4EK0E)](https://codecov.io/gh/eduardbme/prometheus_client_cxx)
+
+---
+
 - [Design goals](#design-goals)
 - [Examples](#examples)
   - [Stdout](#stdout)
