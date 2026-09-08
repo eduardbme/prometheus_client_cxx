@@ -77,3 +77,5 @@ make examples
 ```bash
 make tests
 ```
+
+Test coverage folder `.coverage/coverage-report`.
