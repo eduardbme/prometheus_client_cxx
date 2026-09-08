@@ -22,9 +22,15 @@ jobs:
           mkdir -p .coverage
           docker run --rm -v ${{ github.workspace }}/.coverage:/coverage prometheus_client_cxx_tests
 
+      - name: Check if filtered coverage exists
+        run: |
+          ls -la .coverage/
+          head -n 5 ${{ github.workspace }}/.coverage/coverage.filtered.info
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: ${{ github.workspace }}/.coverage/coverage.filtered.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          disable_search: true
