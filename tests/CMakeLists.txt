@@ -14,6 +14,8 @@ add_executable(runTests ${TEST_SOURCES})
 add_executable(runTsan tsan.cpp)
 add_executable(runAsan tsan.cpp)
 
+target_compile_options(runTests PRIVATE --coverage -O0 -g)
+target_link_options(runTests PRIVATE --coverage)
 target_link_libraries(runTests
     PRIVATE
         GTest::gtest
